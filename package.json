@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-group-manage",
   "description": "Group Management Tools",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -13,9 +13,10 @@
     "chatbot",
     "koishi",
     "plugin",
-    "group-manage",
     "group",
-    "manage"
+    "manage",
+    "qqgroup",
+    "manager"
   ],
   "repository": {
     "type": "git",
@@ -27,7 +28,7 @@
     "url": "https://github.com/idanran"
   },
   "peerDependencies": {
-    "koishi": "^4.15.0"
+    "koishi": "^4.15.2"
   },
   "koishi": {
     "description": {

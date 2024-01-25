@@ -12,6 +12,7 @@ interface BlockingRule {
 
 export interface Config {
   blockingRules: Dict<BlockingRule, string>
+  banDuration: number
 }
 
 export const Config: Schema<Config> = Schema.intersect([
@@ -23,11 +24,14 @@ export const Config: Schema<Config> = Schema.intersect([
       muteDuration: Schema.natural().role('ms').description('禁言时长 (单位为毫秒)').default(10 * Time.minute),
       recall: Schema.boolean().description('检测到违禁词后是否撤回').default(false)
     }).description('群组平台与群组 ID, 格式:`platform:guildId`, 例如:`red:123456`')).description('规则列表'),
-  }).description('违禁词检测')
+  }).description('违禁词检测设置'),
+  Schema.object({
+    banDuration: Schema.natural().role('ms').description('ban 和 self-ban 指令默认禁言时长 (单位为毫秒)').default(15 * Time.hour),
+  }).description('指令默认值设置')
 ])
 
 export const usage: string = `
-使用本插件的指令，需要用户的权限等级为 3 及以上（自我禁言除外）。
+使用本插件对他人进行操作时，需要操作者的权限等级 (authority) 为 3 及以上。
 
 权限设置教程: [https://koishi.chat/zh-CN/manual/usage/customize.html#%E7%94%A8%E6%88%B7%E6%9D%83%E9%99%90](https://koishi.chat/zh-CN/manual/usage/customize.html#%E7%94%A8%E6%88%B7%E6%9D%83%E9%99%90)
 `
@@ -72,67 +76,33 @@ export function apply(ctx: Context, cfg: Config) {
 
   const command = ctx.command('group-manage', '群组管理')
 
-  command.subcommand('ban <user:user> <duration:number> <type>', '禁言指定用户', { authority: 3 })
+  command.subcommand('ban <user:user> <duration:posint> <type>', '禁言指定用户', { authority: 3 })
     .usage('示例：ban @user 1 分钟')
     .alias('禁言')
     .action(async ({ session }, user, duration, type) => {
       if (!user) return '请指定被禁言的用户'
-      if (!duration) return '请指定禁言时长'
-      const [platform, userId] = user.split(':')
-      switch (type) {
-        case '秒':
-        case '秒钟':
-        case 's':
-          duration = duration * 1000
-          break;
-        case '分':
-        case '分钟':
-        case 'min':
-          duration = duration * 60 * 1000
-          break;
-        case '时':
-        case '小时':
-        case 'h':
-          duration = duration * 60 * 60 * 1000
-          break;
-        case '天':
-        case 'd':
-          duration = duration * 24 * 60 * 60 * 1000
-          break;
-        default: return '请指定禁言时长的单位为秒/分钟/小时/天'
+      if (!duration) {
+        duration = cfg.banDuration
+      } else {
+        duration = parseDuration(duration, type)
+        if (duration === undefined) return '请指定禁言时长的单位为秒/分钟/小时/天'
       }
+      const userId = user.replace(session.platform + ':', '')
       await session.bot.muteGuildMember(session.guildId, userId, duration)
       return '已执行禁言'
     })
 
-    command.subcommand('self-ban <duration:number> <type>', '禁言自己')
+  command.subcommand('self-ban <duration:posint> <type>', '禁言自己')
     .usage('示例：self-ban 1 分钟')
     .alias('自我禁言')
     .action(async ({ session }, duration, type) => {
-      if (!duration) return '请指定禁言时长'
-      switch (type) {
-        case '秒':
-        case '秒钟':
-        case 's':
-          duration = duration * 1000
-          break;
-        case '分':
-        case '分钟':
-        case 'min':
-          duration = duration * 60 * 1000
-          break;
-        case '时':
-        case '小时':
-        case 'h':
-          duration = duration * 60 * 60 * 1000
-          break;
-        case '天':
-        case 'd':
-          duration = duration * 24 * 60 * 60 * 1000
-          break;
-        default: return '请指定禁言时长的单位为秒/分钟/小时/天'
+      if (!duration) {
+        duration = cfg.banDuration
+      } else {
+        duration = parseDuration(duration, type)
+        if (duration === undefined) return '请指定禁言时长的单位为秒/分钟/小时/天'
       }
-      await session.bot.muteGuildMember(session.guildId, session.event.user.id, duration)
+      await session.bot.muteGuildMember(session.guildId, session.userId, duration)
       return '已执行禁言'
     })
 
@@ -141,18 +111,17 @@ export function apply(ctx: Context, cfg: Config) {
     .alias('取消禁言')
     .action(async ({ session }, user) => {
       if (!user) return '请指定被取消禁言的用户'
-      const [platform, userId] = user.split(':')
+      const userId = user.replace(session.platform + ':', '')
       await session.bot.muteGuildMember(session.guildId, userId, 0)
       return '已执行取消禁言'
     })
 
   command.subcommand('delmsg', '撤回指定消息', { authority: 3 })
     .usage('示例：回复一条消息，内容有且仅有“delmsg”')
-    .alias('撤回')
+    .alias('撤回消息')
     .action(async ({ session }) => {
       if (!session.quote) return '请回复被撤回的消息'
-      const msgId = session.quote.id || session.quote.messageId
-      await session.bot.deleteMessage(session.channelId, msgId)
+      await session.bot.deleteMessage(session.channelId, session.quote.id)
       return '已执行撤回'
     })
 
@@ -162,8 +131,29 @@ export function apply(ctx: Context, cfg: Config) {
     .alias('踢出群聊')
     .action(async ({ session }, user) => {
       if (!user) return '请指定被踢出群聊的用户'
-      const [platform, userId] = user.split(':')
+      const userId = user.replace(session.platform + ':', '')
       await session.bot.kickGuildMember(session.guildId, userId)
       return '已执行踢出群聊'
     })
+}
+
+function parseDuration(duration: number, type: string): number | undefined {
+  switch (type) {
+    case '秒':
+    case '秒钟':
+    case 's':
+      return duration * 1000
+    case '分':
+    case '分钟':
+    case 'min':
+      return duration * 60 * 1000
+    case '时':
+    case '小时':
+    case 'h':
+      return duration * 60 * 60 * 1000
+    case '天':
+    case 'd':
+      return duration * 24 * 60 * 60 * 1000
+    default: return undefined
+  }
 }

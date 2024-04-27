@@ -26,7 +26,7 @@ export const Config: Schema<Config> = Schema.intersect([
     }).description('群组平台与群组 ID, 格式:`platform:guildId`, 例如:`red:123456`')).description('规则列表'),
   }).description('违禁词检测设置'),
   Schema.object({
-    banDuration: Schema.natural().role('ms').description('ban 和 self-ban 指令默认禁言时长 (单位为毫秒)').default(15 * Time.hour),
+    banDuration: Schema.natural().role('ms').description('ban 和 ban-me 指令默认禁言时长 (单位为毫秒)').default(15 * Time.hour),
   }).description('指令默认值设置')
 ])
 
@@ -78,7 +78,7 @@ export function apply(ctx: Context, cfg: Config) {
 
   command.subcommand('ban <user:user> <duration:posint> <type>', '禁言指定用户', { authority: 3 })
     .usage('示例：ban @user 1 分钟')
-    .alias('禁言')
+    .alias('mute', '禁言')
     .action(async ({ session }, user, duration, type) => {
       if (!user) return '请指定被禁言的用户'
       if (!duration) {
@@ -92,9 +92,9 @@ export function apply(ctx: Context, cfg: Config) {
       return '已执行禁言'
     })
 
-  command.subcommand('self-ban <duration:posint> <type>', '禁言自己')
-    .usage('示例：self-ban 1 分钟')
-    .alias('自我禁言')
+  command.subcommand('ban-me <duration:posint> <type>', '禁言自己')
+    .usage('示例：ban-me 1 分钟')
+    .alias('self-ban', 'mute-me', '自我禁言')
     .action(async ({ session }, duration, type) => {
       if (!duration) {
         duration = cfg.banDuration
@@ -108,7 +108,7 @@ export function apply(ctx: Context, cfg: Config) {
 
   command.subcommand('unban <user:user>', '取消指定用户的禁言', { authority: 3 })
     .usage('示例：unban @user')
-    .alias('取消禁言')
+    .alias('unmute', '取消禁言')
     .action(async ({ session }, user) => {
       if (!user) return '请指定被取消禁言的用户'
       const userId = user.replace(session.platform + ':', '')
@@ -135,6 +135,52 @@ export function apply(ctx: Context, cfg: Config) {
       await session.bot.kickGuildMember(session.guildId, userId)
       return '已执行踢出群聊'
     })
+
+  command.subcommand('mute-all', '开启全员禁言', { authority: 3 })
+    .alias('全员禁言')
+    .action(async ({ session }) => {
+      const { platform, guildId } = session
+      switch (platform) {
+        case 'red':
+          await session.bot.internal.muteGroup({
+            group: guildId,
+            enable: true
+          })
+          break
+        case 'onebot':
+          await session.bot.internal.setGroupWholeBan(guildId, true)
+          break
+        case 'kritor':
+          await session.bot.internal.setGroupWholeBan(guildId, true)
+          break
+        default:
+          return '暂不支持该平台'
+      }
+      return '已执行全员禁言'
+    })
+
+  command.subcommand('unmute-all', '取消全员禁言', { authority: 3 })
+    .alias('取消全员禁言')
+    .action(async ({ session }) => {
+      const { platform, guildId } = session
+      switch (platform) {
+        case 'red':
+          await session.bot.internal.muteGroup({
+            group: guildId,
+            enable: false
+          })
+          break
+        case 'onebot':
+          await session.bot.internal.setGroupWholeBan(guildId, false)
+          break
+        case 'kritor':
+          await session.bot.internal.setGroupWholeBan(guildId, false)
+          break
+        default:
+          return '暂不支持该平台'
+      }
+      return '已执行取消全员禁言'
+    })
 }
 
 function parseDuration(duration: number, type: string): number | undefined {
@@ -154,6 +200,7 @@ function parseDuration(duration: number, type: string): number | undefined {
     case '天':
     case 'd':
       return duration * 24 * 60 * 60 * 1000
-    default: return undefined
+    default:
+      return undefined
   }
 }

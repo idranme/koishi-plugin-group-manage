@@ -44,13 +44,13 @@ export function apply(ctx: Context, cfg: Config) {
 
       let hits = false
       for (const word of rule.blockingWords) {
+        const re = new RegExp(word)
         const include = session.event.message.elements.some(value => {
           if (value.type === 'text') {
-            return new RegExp(word).test(value.attrs.content)
+            return re.test(value.attrs.content)
           }
           return false
         })
-
         if (include) {
           hits = true
           break

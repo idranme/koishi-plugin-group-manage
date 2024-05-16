@@ -1,0 +1,62 @@
+group-manage:
+  blocking-word:
+    hit: 检测到违禁词
+    recall: 已执行撤回
+    mute: 已执行禁言
+
+commands:
+  group-manage:
+    description: 群组管理
+
+  ban:
+    description: 禁言指定用户
+    usage: |-
+      示例：ban @user 1 分钟
+    messages:
+      missing-user: 请指定被禁言的用户
+      missing-duration: 请指定禁言时长的单位为秒/分钟/小时/天
+      executed: 已执行禁言
+
+  ban-me:
+    description: 禁言自己
+    usage: |-
+      示例：ban-me 1 分钟
+    messages:
+      missing-duration: 请指定禁言时长的单位为秒/分钟/小时/天
+      executed: 已执行禁言
+
+  unban:
+    description: 取消指定用户的禁言
+    usage: |-
+      示例：unban @user
+    messages:
+      missing-user: 请指定被取消禁言的用户
+      executed: 已执行取消禁言
+
+  delmsg:
+    description: 撤回指定消息
+    usage: |-
+      示例：回复一条消息，内容有且仅有“delmsg”
+    messages:
+      missing-quote: 请回复被撤回的消息
+      executed: 已执行撤回
+
+  kick:
+    description: 将指定用户踢出群聊
+    usage: |-
+      示例：kick @user
+    messages:
+      missing-user: 请指定被踢出群聊的用户
+      executed: 已执行踢出群聊
+
+  mute-all:
+    description: 开启全员禁言
+    messages:
+      unsupported-platform: 暂不支持该平台
+      executed: 已执行全员禁言
+
+  unmute-all:
+    description: 取消全员禁言
+    messages:
+      unsupported-platform: 暂不支持该平台
+      executed: 已执行取消全员禁言

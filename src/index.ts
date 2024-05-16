@@ -37,12 +37,14 @@ export const usage: string = `
 `
 
 export function apply(ctx: Context, cfg: Config) {
+  ctx.i18n.define('zh-CN', require('./locales/zh-CN'))
+
   ctx.middleware(async (session, next) => {
     if (session.gid in cfg.blockingRules) {
       const rule = cfg.blockingRules[session.gid]
       if (!rule.enable) return next()
 
-      let hits = false
+      let hit = false
       for (const word of rule.blockingWords) {
         const re = new RegExp(word)
         const include = session.event.message.elements.some(value => {
@@ -52,21 +54,21 @@ export function apply(ctx: Context, cfg: Config) {
           return false
         })
         if (include) {
-          hits = true
+          hit = true
           break
         }
       }
 
-      if (hits) {
-        await session.send('检测到违禁词')
+      if (hit) {
+        await session.send(session.text('group-manage.blocking-word.hit'))
         const { event } = session
         if (rule.recall) {
           await session.bot.deleteMessage(event.channel.id, event.message.id)
-          await session.send('已执行撤回')
+          await session.send(session.text('group-manage.blocking-word.recall'))
         }
         if (rule.mute) {
           await session.bot.muteGuildMember(event.guild.id, event.user.id, rule.muteDuration)
-          await session.send('已执行禁言')
+          await session.send(session.text('group-manage.blocking-word.mute'))
         }
         return
       }
@@ -74,69 +76,63 @@ export function apply(ctx: Context, cfg: Config) {
     return next()
   })
 
-  const command = ctx.command('group-manage', '群组管理')
+  const command = ctx.command('group-manage')
 
-  command.subcommand('ban <user:user> <duration:posint> <type>', '禁言指定用户', { authority: 3 })
-    .usage('示例：ban @user 1 分钟')
+  command.subcommand('ban <user:user> <duration:posint> <type>', { authority: 3 })
     .alias('mute', '禁言')
     .action(async ({ session }, user, duration, type) => {
-      if (!user) return '请指定被禁言的用户'
+      if (!user) return session.text('.missing-user')
       if (!duration) {
         duration = cfg.banDuration
       } else {
         duration = parseDuration(duration, type)
-        if (duration === undefined) return '请指定禁言时长的单位为秒/分钟/小时/天'
+        if (duration === undefined) return session.text('.missing-duration')
       }
       const userId = user.replace(session.platform + ':', '')
       await session.bot.muteGuildMember(session.guildId, userId, duration)
-      return '已执行禁言'
+      return session.text('.executed')
     })
 
-  command.subcommand('ban-me <duration:posint> <type>', '禁言自己')
-    .usage('示例：ban-me 1 分钟')
+  command.subcommand('ban-me <duration:posint> <type>')
     .alias('self-ban', 'mute-me', '自我禁言')
     .action(async ({ session }, duration, type) => {
       if (!duration) {
         duration = cfg.banDuration
       } else {
         duration = parseDuration(duration, type)
-        if (duration === undefined) return '请指定禁言时长的单位为秒/分钟/小时/天'
+        if (duration === undefined) return session.text('.missing-duration')
       }
       await session.bot.muteGuildMember(session.guildId, session.userId, duration)
-      return '已执行禁言'
+      return session.text('.executed')
     })
 
-  command.subcommand('unban <user:user>', '取消指定用户的禁言', { authority: 3 })
-    .usage('示例：unban @user')
+  command.subcommand('unban <user:user>', { authority: 3 })
     .alias('unmute', '取消禁言')
     .action(async ({ session }, user) => {
-      if (!user) return '请指定被取消禁言的用户'
+      if (!user) return session.text('.missing-user')
       const userId = user.replace(session.platform + ':', '')
       await session.bot.muteGuildMember(session.guildId, userId, 0)
-      return '已执行取消禁言'
+      return session.text('.executed')
     })
 
-  command.subcommand('delmsg', '撤回指定消息', { authority: 3 })
-    .usage('示例：回复一条消息，内容有且仅有“delmsg”')
+  command.subcommand('delmsg', { authority: 3 })
     .alias('撤回消息')
     .action(async ({ session }) => {
-      if (!session.quote) return '请回复被撤回的消息'
+      if (!session.quote) return session.text('.missing-quote')
       await session.bot.deleteMessage(session.channelId, session.quote.id)
-      return '已执行撤回'
+      return session.text('.executed')
     })
 
-  command.subcommand('kick <user:user>', '将指定用户踢出群聊', { authority: 3 })
-    .usage('示例：kick @user')
-    .alias('踢')
-    .alias('踢出群聊')
+  command.subcommand('kick <user:user>', { authority: 3 })
+    .alias('踢', '踢出群聊')
     .action(async ({ session }, user) => {
-      if (!user) return '请指定被踢出群聊的用户'
+      if (!user) return session.text('.missing-user')
       const userId = user.replace(session.platform + ':', '')
       await session.bot.kickGuildMember(session.guildId, userId)
-      return '已执行踢出群聊'
+      return session.text('.executed')
     })
 
-  command.subcommand('mute-all', '开启全员禁言', { authority: 3 })
+  command.subcommand('mute-all', { authority: 3 })
     .alias('全员禁言')
     .action(async ({ session }) => {
       const { platform, guildId } = session
@@ -154,12 +150,12 @@ export function apply(ctx: Context, cfg: Config) {
           await session.bot.internal.setGroupWholeBan(guildId, true)
           break
         default:
-          return '暂不支持该平台'
+          return session.text('.unsupported-platform')
       }
-      return '已执行全员禁言'
+      return session.text('.executed')
     })
 
-  command.subcommand('unmute-all', '取消全员禁言', { authority: 3 })
+  command.subcommand('unmute-all', { authority: 3 })
     .alias('取消全员禁言')
     .action(async ({ session }) => {
       const { platform, guildId } = session
@@ -177,9 +173,9 @@ export function apply(ctx: Context, cfg: Config) {
           await session.bot.internal.setGroupWholeBan(guildId, false)
           break
         default:
-          return '暂不支持该平台'
+          return session.text('.unsupported-platform')
       }
-      return '已执行取消全员禁言'
+      return session.text('.executed')
     })
 }
 

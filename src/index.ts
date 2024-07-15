@@ -33,7 +33,7 @@ export const Config: Schema<Config> = Schema.intersect([
 export const usage: string = `
 使用本插件对他人进行操作时，需要操作者的权限等级 (authority) 为 3 及以上。
 
-权限设置教程: [https://koishi.chat/zh-CN/manual/usage/customize.html#%E7%94%A8%E6%88%B7%E6%9D%83%E9%99%90](https://koishi.chat/zh-CN/manual/usage/customize.html#%E7%94%A8%E6%88%B7%E6%9D%83%E9%99%90)
+权限设置教程: https://koishi.chat/zh-CN/manual/usage/customize.html#%E7%94%A8%E6%88%B7%E6%9D%83%E9%99%90
 `
 
 export function apply(ctx: Context, cfg: Config) {
@@ -78,14 +78,14 @@ export function apply(ctx: Context, cfg: Config) {
 
   const command = ctx.command('group-manage')
 
-  command.subcommand('ban <user:user> <duration:posint> <type>', { authority: 3 })
+  command.subcommand('ban <user:user> <duration:posint> <unit>', { authority: 3 })
     .alias('mute', '禁言')
-    .action(async ({ session }, user, duration, type) => {
+    .action(async ({ session }, user, duration, unit) => {
       if (!user) return session.text('.missing-user')
       if (!duration) {
         duration = cfg.banDuration
       } else {
-        duration = parseDuration(duration, type)
+        duration = parseDuration(duration, unit)
         if (duration === undefined) return session.text('.missing-duration')
       }
       const userId = user.replace(session.platform + ':', '')
@@ -93,13 +93,13 @@ export function apply(ctx: Context, cfg: Config) {
       return session.text('.executed')
     })
 
-  command.subcommand('ban-me <duration:posint> <type>')
+  command.subcommand('ban-me <duration:posint> <unit>')
     .alias('self-ban', 'mute-me', '自我禁言')
-    .action(async ({ session }, duration, type) => {
+    .action(async ({ session }, duration, unit) => {
       if (!duration) {
         duration = cfg.banDuration
       } else {
-        duration = parseDuration(duration, type)
+        duration = parseDuration(duration, unit)
         if (duration === undefined) return session.text('.missing-duration')
       }
       await session.bot.muteGuildMember(session.guildId, session.userId, duration)
@@ -179,8 +179,8 @@ export function apply(ctx: Context, cfg: Config) {
     })
 }
 
-function parseDuration(duration: number, type: string): number | undefined {
-  switch (type) {
+function parseDuration(duration: number, unit: string): number | undefined {
+  switch (unit) {
     case '秒':
     case '秒钟':
     case 's':

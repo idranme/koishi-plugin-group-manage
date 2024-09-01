@@ -8,6 +8,7 @@ interface BlockingRule {
   mute: boolean
   muteDuration: number
   recall: boolean
+  tip: boolean
 }
 
 export interface Config {
@@ -22,7 +23,8 @@ export const Config: Schema<Config> = Schema.intersect([
       blockingWords: Schema.array(String).description('违禁词列表 (可使用正则表达式)').default([]),
       mute: Schema.boolean().description('检测到违禁词后是否禁言').default(false),
       muteDuration: Schema.natural().role('ms').description('禁言时长 (单位为毫秒)').default(10 * Time.minute),
-      recall: Schema.boolean().description('检测到违禁词后是否撤回').default(false)
+      recall: Schema.boolean().description('检测到违禁词后是否撤回').default(false),
+      tip: Schema.boolean().description('是否在检测到违禁词后进行提示').default(true)
     }).description('群组平台与群组 ID, 格式:`platform:guildId`, 例如:`red:123456`')).description('规则列表'),
   }).description('违禁词检测设置'),
   Schema.object({
@@ -60,15 +62,15 @@ export function apply(ctx: Context, cfg: Config) {
       }
 
       if (hit) {
-        await session.send(session.text('group-manage.blocking-word.hit'))
+        rule.tip && await session.send(session.text('group-manage.blocking-word.hit'))
         const { event } = session
         if (rule.recall) {
           await session.bot.deleteMessage(event.channel.id, event.message.id)
-          await session.send(session.text('group-manage.blocking-word.recall'))
+          rule.tip && await session.send(session.text('group-manage.blocking-word.recall'))
         }
         if (rule.mute) {
           await session.bot.muteGuildMember(event.guild.id, event.user.id, rule.muteDuration)
-          await session.send(session.text('group-manage.blocking-word.mute'))
+          rule.tip && await session.send(session.text('group-manage.blocking-word.mute'))
         }
         return
       }

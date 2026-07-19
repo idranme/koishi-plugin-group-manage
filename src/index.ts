@@ -5,6 +5,7 @@ export const name = 'group-manage'
 interface BlockingRule {
   enable: boolean
   blockingWords: string[]
+  matchMode: 'text' | 'all'
   mute: boolean
   muteDuration: number
   recall: boolean
@@ -21,6 +22,10 @@ export const Config: Schema<Config> = Schema.intersect([
     blockingRules: Schema.dict(Schema.object({
       enable: Schema.boolean().description('是否启用').default(true),
       blockingWords: Schema.array(String).description('违禁词列表 (可使用正则表达式)').default([]),
+      matchMode: Schema.union([
+        Schema.const('text').description('仅匹配文本'),
+        Schema.const('all').description('匹配全部'),
+      ]).description('匹配模式').default('text'),
       mute: Schema.boolean().description('检测到违禁词后是否禁言').default(false),
       muteDuration: Schema.natural().role('ms').description('禁言时长 (单位为毫秒)').default(10 * Time.minute),
       recall: Schema.boolean().description('检测到违禁词后是否撤回').default(false),
@@ -49,12 +54,17 @@ export function apply(ctx: Context, cfg: Config) {
       let hit = false
       for (const word of rule.blockingWords) {
         const re = new RegExp(word)
-        const include = session.event.message.elements.some(value => {
-          if (value.type === 'text') {
-            return re.test(value.attrs.content)
-          }
-          return false
-        })
+        let include
+        if (rule.matchMode === 'text') {
+          include = session.event.message!.elements!.some(value => {
+            if (value.type === 'text') {
+              return re.test(value.attrs.content)
+            }
+            return false
+          })
+        } else {
+          include = re.test(session.content!)
+        }
         if (include) {
           hit = true
           break
@@ -65,11 +75,11 @@ export function apply(ctx: Context, cfg: Config) {
         rule.tip && await session.send(session.text('group-manage.blocking-word.hit'))
         const { event } = session
         if (rule.recall) {
-          await session.bot.deleteMessage(event.channel.id, event.message.id)
+          await session.bot.deleteMessage(event.channel!.id, event.message!.id!)
           rule.tip && await session.send(session.text('group-manage.blocking-word.recall'))
         }
         if (rule.mute) {
-          await session.bot.muteGuildMember(event.guild.id, event.user.id, rule.muteDuration)
+          await session.bot.muteGuildMember(event.guild!.id, event.user!.id, rule.muteDuration)
           rule.tip && await session.send(session.text('group-manage.blocking-word.mute'))
         }
         return
@@ -82,61 +92,69 @@ export function apply(ctx: Context, cfg: Config) {
 
   command.subcommand('ban <user:user> <duration:posint> <unit>', { authority: 3 })
     .alias('mute', '禁言')
-    .action(async ({ session }, user, duration, unit) => {
+    .action(async (argv, user, duration, unit) => {
+      const session = argv.session!
       if (!user) return session.text('.missing-user')
       if (!duration) {
         duration = cfg.banDuration
       } else {
-        duration = parseDuration(duration, unit)
-        if (duration === undefined) return session.text('.missing-duration')
+        const parsed = parseDuration(duration, unit)
+        if (parsed === undefined) return session.text('.missing-duration')
+        duration = parsed
       }
       const userId = user.replace(session.platform + ':', '')
-      await session.bot.muteGuildMember(session.guildId, userId, duration)
+      await session.bot.muteGuildMember(session.guildId!, userId, duration)
       return session.text('.executed')
     })
 
   command.subcommand('ban-me <duration:posint> <unit>')
     .alias('self-ban', 'mute-me', '自我禁言')
-    .action(async ({ session }, duration, unit) => {
+    .action(async (argv, duration, unit) => {
+      const session = argv.session!
       if (!duration) {
         duration = cfg.banDuration
       } else {
-        duration = parseDuration(duration, unit)
-        if (duration === undefined) return session.text('.missing-duration')
+        const parsed = parseDuration(duration, unit)
+        if (parsed === undefined) return session.text('.missing-duration')
+        duration = parsed
       }
-      await session.bot.muteGuildMember(session.guildId, session.userId, duration)
+      await session.bot.muteGuildMember(session.guildId!, session.userId!, duration)
       return session.text('.executed')
     })
 
   command.subcommand('unban <user:user>', { authority: 3 })
     .alias('unmute', '取消禁言')
-    .action(async ({ session }, user) => {
+    .action(async (argv, user) => {
+      const session = argv.session!
       if (!user) return session.text('.missing-user')
       const userId = user.replace(session.platform + ':', '')
-      await session.bot.muteGuildMember(session.guildId, userId, 0)
+      await session.bot.muteGuildMember(session.guildId!, userId, 0)
       return session.text('.executed')
     })
 
   command.subcommand('delmsg', { authority: 3 })
     .alias('撤回消息')
-    .action(async ({ session }) => {
+    .action(async (argv) => {
+      const session = argv.session!
       if (!session.quote) return session.text('.missing-quote')
-      await session.bot.deleteMessage(session.channelId, session.quote.id)
+      await session.bot.deleteMessage(session.channelId!, session.quote.id!)
       return session.text('.executed')
     })
 
   command.subcommand('kick <user:user>', { authority: 3 })
     .alias('踢', '踢出群聊')
-    .action(async ({ session }, user) => {
+    .action(async (argv, user) => {
+      const session = argv.session!
       if (!user) return session.text('.missing-user')
       const userId = user.replace(session.platform + ':', '')
-      await session.bot.kickGuildMember(session.guildId, userId)
+      await session.bot.kickGuildMember(session.guildId!, userId)
       return session.text('.executed')
     })
 
   command.subcommand('mute-all', { authority: 3 })
     .alias('全员禁言')
-    .action(async ({ session }) => {
+    .action(async (argv) => {
+      const session = argv.session!
       const { platform, guildId } = session
       switch (platform) {
         case 'red':
@@ -159,7 +177,8 @@ export function apply(ctx: Context, cfg: Config) {
 
   command.subcommand('unmute-all', { authority: 3 })
     .alias('取消全员禁言')
-    .action(async ({ session }) => {
+    .action(async (argv) => {
+      const session = argv.session!
       const { platform, guildId } = session
       switch (platform) {
         case 'red':

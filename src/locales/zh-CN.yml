@@ -47,6 +47,8 @@ commands:
       示例：batch-del-msg 20
     messages:
       missing-count: 请指定要撤回消息的条数
+      unsupported-history: 当前平台或适配器不支持拉取历史消息，无法使用批量撤回
+      failed: 批量撤回消息失败
       executed: 已执行撤回
 
   kick:
